@@ -23,7 +23,7 @@ jobs:
       - name: Build with Go
         run: |
           mkdir -p target
-          go build -v -o target/fabric-cli ./cmd/fabric-cli
+          go build -o target/fabric-cli ./cmd/fabric-cli
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
