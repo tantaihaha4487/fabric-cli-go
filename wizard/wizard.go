@@ -329,6 +329,9 @@ func (s *OptionsStep) Name() string {
 func (s *OptionsStep) Execute(ctx *ProjectContext) error {
 	var envChoice string
 
+	// Set mixins to enabled by default
+	ctx.UseMixins = true
+
 	form := huh.NewForm(
 		huh.NewGroup(
 			huh.NewConfirm().
