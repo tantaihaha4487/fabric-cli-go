@@ -29,10 +29,7 @@ jobs:
       - name: Get project version
         id: get_version
         run: |
-          VERSION=$(grep -oE 'Version:\s*"([^"]+)"' config/config.go | cut -d'"' -f2 | head -n 1)
-          if [ -z "$VERSION" ]; then
-            VERSION="1.0.0"
-          fi
+          VERSION='1.0.1'
           echo "version=$VERSION" >> $GITHUB_OUTPUT
 
       - name: Find Binary file
