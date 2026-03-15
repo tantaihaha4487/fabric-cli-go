@@ -136,67 +136,49 @@ func (s *VersionStep) Execute(ctx *ProjectContext) error {
 		}
 	}
 
-	// Ask if user wants to search
-	var useSearch bool
-	form := huh.NewForm(
+	// Prepare all version options
+	var mcOptions []huh.Option[string]
+	for _, g := range allStableVersions {
+		mcOptions = append(mcOptions, huh.NewOption(g.Version, g.Version))
+	}
+
+	// Show total count
+	fmt.Printf("[OK] Loaded %d Minecraft versions\n\n", len(mcOptions))
+
+	// Ask for search term
+	var searchTerm string
+	searchForm := huh.NewForm(
 		huh.NewGroup(
-			huh.NewConfirm().
-				Title("Search for a specific Minecraft version?").
-				Value(&useSearch).
-				Affirmative("Yes").
-				Negative("No, show list"),
+			huh.NewInput().
+				Title("Type to search versions (or leave empty to show all)").
+				Placeholder("e.g., 1.21, 1.20.1").
+				Value(&searchTerm),
 		),
 	)
 
-	if err := form.Run(); err != nil {
+	if err := searchForm.Run(); err != nil {
 		return err
 	}
 
-	var mcOptions []huh.Option[string]
-
-	if useSearch {
-		// Search for version
-		var searchTerm string
-		searchForm := huh.NewForm(
-			huh.NewGroup(
-				huh.NewInput().
-					Title("Enter version to search (e.g., 1.20, 1.21.4)").
-					Placeholder("1.21").
-					Value(&searchTerm),
-			),
-		)
-		if err := searchForm.Run(); err != nil {
-			return err
-		}
-
-		// Filter versions based on search term
-		searchTerm = strings.ToLower(strings.TrimSpace(searchTerm))
-		var filteredVersions []api.GameVersion
-		for _, g := range allStableVersions {
-			if strings.Contains(strings.ToLower(g.Version), searchTerm) {
-				filteredVersions = append(filteredVersions, g)
+	// Filter versions based on search term
+	searchTerm = strings.ToLower(strings.TrimSpace(searchTerm))
+	if searchTerm != "" {
+		var filteredOptions []huh.Option[string]
+		for _, opt := range mcOptions {
+			if strings.Contains(strings.ToLower(opt.Key), searchTerm) {
+				filteredOptions = append(filteredOptions, opt)
 			}
 		}
-
-		if len(filteredVersions) == 0 {
-			fmt.Printf("[!]  No versions found matching '%s'. Showing all versions.\n", searchTerm)
-			filteredVersions = allStableVersions
+		if len(filteredOptions) > 0 {
+			mcOptions = filteredOptions
+			fmt.Printf("[OK] Found %d matching versions\n\n", len(mcOptions))
 		} else {
-			fmt.Printf("[OK] Found %d versions matching '%s'\n", len(filteredVersions), searchTerm)
-		}
-
-		for _, g := range filteredVersions {
-			mcOptions = append(mcOptions, huh.NewOption(g.Version, g.Version))
-		}
-	} else {
-		// Use default list (first 10)
-		for _, g := range allStableVersions[:min(10, len(allStableVersions))] {
-			mcOptions = append(mcOptions, huh.NewOption(g.Version, g.Version))
+			fmt.Printf("[!] No matches found, showing all versions\n\n")
 		}
 	}
 
 	// Minecraft version selection
-	form = huh.NewForm(
+	form := huh.NewForm(
 		huh.NewGroup(
 			huh.NewSelect[string]().
 				Title("Select Minecraft Version").

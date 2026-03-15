@@ -5,6 +5,7 @@ A command-line tool for generating Fabric mod projects for Minecraft.
 ## Features
 
 - **Interactive TUI** - Beautiful terminal interface using [charmbracelet/huh](https://github.com/charmbracelet/huh)
+- **Type-to-Search** - Search for specific Minecraft versions by typing (e.g., "1.21", "1.20.1")
 - **Real-time Version Fetching** - Automatically fetches latest versions from Fabric Meta and Modrinth APIs
 - **Concurrent API Calls** - Fetches version data in parallel for speed
 - **Complete Project Generation** - Generates all necessary files:
@@ -19,14 +20,14 @@ A command-line tool for generating Fabric mod projects for Minecraft.
 ## Installation
 
 ```bash
-go install github.com/yourusername/fabric-cli/cmd/fabric-cli@latest
+go install github.com/tantaihaha4487/fabric-cli-go/cmd/fabric-cli@latest
 ```
 
 Or clone and build:
 
 ```bash
-git clone https://github.com/yourusername/fabric-cli.git
-cd fabric-cli
+git clone https://github.com/tantaihaha4487/fabric-cli-go.git
+cd fabric-cli-go
 go build -o fabric-cli ./cmd/fabric-cli
 ```
 
@@ -39,7 +40,7 @@ Simply run:
 ```
 
 The wizard will guide you through:
-1. **Version Selection** - Choose Minecraft, Yarn, Loader, and Fabric API versions
+1. **Version Selection** - Search for Minecraft version, then select Yarn, Loader, and Fabric API versions
 2. **Mod Metadata** - Enter mod ID, name, description, group ID, etc.
 3. **Additional Options** - Enable mixins, select environment, Java version
 
@@ -47,15 +48,22 @@ The wizard will guide you through:
 
 ```bash
 $ ./fabric-cli
-🔧 Fabric Project Generator
+[Fabric] Fabric Project Generator
 Fetching latest versions...
-✓ Found 500+ Minecraft versions
-✓ Found 2000+ Yarn mappings
-✓ Found 150+ Fabric API versions
+[OK] Found 483 Minecraft versions
+[OK] Found 3410 Yarn mappings
+[OK] Found 1015 Fabric API versions
+
+[OK] Loaded 483 Minecraft versions
+
+Type to search versions (or leave empty to show all)
+> 1.21
+
+[OK] Found 12 matching versions
 
 [Interactive TUI prompts...]
 
-📋 Configuration Summary:
+[Summary] Configuration Summary:
 ════════════════════════════════════════
 Minecraft:    1.21.4
 Yarn:         1.21.4+build.8
@@ -68,17 +76,17 @@ Group ID:     com.example
 Version:      1.0.0
 Mixins:       true
 
-🚀 Generating project in 'mycoolmod/'...
+[Generate] Generating project in 'mycoolmod/'...
 
-  ✓ Generated: build.gradle
-  ✓ Generated: gradle.properties
-  ✓ Generated: settings.gradle
-  ✓ Generated: gradle/wrapper/gradle-wrapper.properties
-  ✓ Generated: src/main/resources/fabric.mod.json
-  ✓ Generated: src/main/resources/mycoolmod.mixins.json
-  ✓ Generated: src/main/java/com/example/mycoolmod/Mycoolmod.java
+  [OK] Generated: build.gradle
+  [OK] Generated: gradle.properties
+  [OK] Generated: settings.gradle
+  [OK] Generated: gradle/wrapper/gradle-wrapper.properties
+  [OK] Generated: src/main/resources/fabric.mod.json
+  [OK] Generated: src/main/resources/mycoolmod.mixins.json
+  [OK] Generated: src/main/java/com/example/mycoolmod/Mycoolmod.java
 
-✅ Project generated successfully!
+[Success] Project generated successfully!
 
 Next steps:
   cd mycoolmod
