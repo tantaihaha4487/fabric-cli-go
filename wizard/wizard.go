@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"strings"
 
-	"fabric-cli/api"
-	"fabric-cli/config"
+	"github.com/tantaihaha4487/fabric-cli-go/api"
+	"github.com/tantaihaha4487/fabric-cli-go/config"
 	"github.com/charmbracelet/huh"
 	"github.com/charmbracelet/lipgloss"
 )

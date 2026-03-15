@@ -10,7 +10,7 @@ import (
 	"strings"
 	"text/template"
 
-	"fabric-cli/wizard"
+	"github.com/tantaihaha4487/fabric-cli-go/wizard"
 )
 
 // Generator handles project file generation

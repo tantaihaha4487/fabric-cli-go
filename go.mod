@@ -1,4 +1,4 @@
-module fabric-cli
+module github.com/tantaihaha4487/fabric-cli-go
 
 go 1.25.0
 

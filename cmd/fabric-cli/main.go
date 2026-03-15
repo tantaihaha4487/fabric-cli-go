@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"os"
 
-	"fabric-cli/api"
-	"fabric-cli/generator"
-	"fabric-cli/wizard"
+	"github.com/tantaihaha4487/fabric-cli-go/api"
+	"github.com/tantaihaha4487/fabric-cli-go/generator"
+	"github.com/tantaihaha4487/fabric-cli-go/wizard"
 )
 
 func main() {
