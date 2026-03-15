@@ -4,7 +4,6 @@
 *.dll
 *.so
 *.dylib
-/fabric-cli
 /target/
 
 # Test binary, built with `go test -c`
