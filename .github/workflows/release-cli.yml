@@ -24,7 +24,7 @@ jobs:
       - name: Build with Go
         run: |
           mkdir -p target
-          go build -v -ldflags="-w -s" -o target/fabric-cli ./cmd/fabric-cli
+          go build -ldflags="-w -s" -o target/fabric-cli ./cmd/fabric-cli
 
       - name: Get project version
         id: get_version
