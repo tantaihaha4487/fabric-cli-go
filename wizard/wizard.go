@@ -4,10 +4,10 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/tantaihaha4487/fabric-cli-go/api"
-	"github.com/tantaihaha4487/fabric-cli-go/config"
 	"github.com/charmbracelet/huh"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/tantaihaha4487/fabric-cli-go/api"
+	"github.com/tantaihaha4487/fabric-cli-go/config"
 )
 
 // ProjectContext holds all configuration data collected from the wizard

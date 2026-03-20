@@ -5,9 +5,11 @@ A command-line tool for generating Fabric mod projects for Minecraft.
 ## Features
 
 - **Interactive TUI** - Beautiful terminal interface using [charmbracelet/huh](https://github.com/charmbracelet/huh)
+- **Quick Mode** - Fast project generation with command-line arguments
 - **Type-to-Search** - Search for specific Minecraft versions by typing (e.g., "1.21", "1.20.1")
 - **Real-time Version Fetching** - Automatically fetches latest versions from Fabric Meta and Modrinth APIs
 - **Concurrent API Calls** - Fetches version data in parallel for speed
+- **Auto-Complete** - Automatically selects latest compatible versions and converts mod names to IDs
 - **Complete Project Generation** - Generates all necessary files:
   - `build.gradle` with proper dependencies
   - `gradle.properties` with mod metadata
@@ -33,7 +35,9 @@ go build -o fabric-cli ./cmd/fabric-cli
 
 ## Usage
 
-Simply run:
+### Interactive Wizard Mode (Default)
+
+Simply run without arguments to start the interactive wizard:
 
 ```bash
 ./fabric-cli
@@ -43,6 +47,48 @@ The wizard will guide you through:
 1. **Version Selection** - Search for Minecraft version, then select Yarn, Loader, and Fabric API versions
 2. **Mod Metadata** - Enter mod ID, name, description, group ID, etc.
 3. **Additional Options** - Enable mixins, select environment, Java version
+
+### Quick Mode
+
+For faster project generation, use quick mode with positional arguments:
+
+```bash
+./fabric-cli <mc_version> <mod_name> <mod_version> [group_id]
+```
+
+**Arguments:**
+- `mc_version` - Minecraft version (e.g., 1.21.4, 1.20.1)
+- `mod_name` - Display name for your mod (auto-converted to mod ID)
+- `mod_version` - Version of your mod (e.g., 1.0.0)
+- `group_id` - Maven group ID (optional, uses saved config or 'com.example')
+
+**Quick Mode Options:**
+- `--no-mixins` - Disable Mixins support
+- `--client-only` - Set environment to client only
+- `--server-only` - Set environment to server only
+- `--java-version=N` - Set Java version (default: 21)
+- `--license=TYPE` - Set license (default: MIT)
+
+**Examples:**
+
+```bash
+# Quick mode with defaults
+./fabric-cli 1.21.4 "My Cool Mod" 1.0.0
+
+# Quick mode with group ID
+./fabric-cli 1.21.4 "My Cool Mod" 1.0.0 com.example
+
+# Quick mode with options
+./fabric-cli 1.21.4 "My Cool Mod" 1.0.0 com.example \
+  --no-mixins --client-only --java-version=17 --license=Apache-2.0
+```
+
+### Help & Version
+
+```bash
+./fabric-cli -h          # or --help
+./fabric-cli -v          # or --version
+```
 
 ## Example
 
