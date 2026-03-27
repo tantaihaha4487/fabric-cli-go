@@ -61,7 +61,7 @@ func NewWizard() *Wizard {
 		steps: make([]Step, 0),
 		ctx: &ProjectContext{
 			Templates:   make(map[string]string),
-			JavaVersion: 21,
+			JavaVersion: 0,
 			Environment: "*",
 			License:     "MIT",
 			GroupID:     cfg.GroupID,
