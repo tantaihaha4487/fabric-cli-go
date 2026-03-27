@@ -8,6 +8,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/tantaihaha4487/fabric-cli-go/api"
 	"github.com/tantaihaha4487/fabric-cli-go/config"
+	"github.com/tantaihaha4487/fabric-cli-go/internal/javaport"
 )
 
 // ProjectContext holds all configuration data collected from the wizard
@@ -253,6 +254,53 @@ func (s *VersionStep) Execute(ctx *ProjectContext) error {
 		return err
 	}
 
+	detectedJava, _ := javaport.DetectJava()
+	detectedVersions := make(map[int]bool)
+	for _, java := range detectedJava {
+		detectedVersions[java.Version] = true
+	}
+
+	recommendedJava := javaport.GetRecommendedJava(ctx.MCVersion)
+
+	var javaOptions []huh.Option[int]
+	if len(detectedJava) > 0 {
+		for _, java := range detectedJava {
+			javaOptions = append(javaOptions, huh.NewOption(
+				fmt.Sprintf("Java %d (%s)", java.Version, java.Path),
+				java.Version,
+			))
+		}
+	}
+
+	for _, v := range javaport.GetStaticJavaOptions() {
+		if !detectedVersions[v] {
+			javaOptions = append(javaOptions, huh.NewOption(fmt.Sprintf("Java %d", v), v))
+		}
+	}
+
+	if ctx.JavaVersion == 0 {
+		if detectedVersions[recommendedJava] {
+			ctx.JavaVersion = recommendedJava
+		} else if len(detectedJava) > 0 {
+			ctx.JavaVersion = detectedJava[0].Version
+		}
+	}
+
+	javaTitle := fmt.Sprintf("Java Version (Recommended: Java %d for MC %s)", recommendedJava, ctx.MCVersion)
+	form = huh.NewForm(
+		huh.NewGroup(
+			huh.NewSelect[int]().
+				Title(javaTitle).
+				Description("Target Java version for compilation").
+				Options(javaOptions...).
+				Value(&ctx.JavaVersion),
+		),
+	)
+
+	if err := form.Run(); err != nil {
+		return err
+	}
+
 	return nil
 }
 
@@ -329,7 +377,6 @@ func (s *OptionsStep) Name() string {
 func (s *OptionsStep) Execute(ctx *ProjectContext) error {
 	var envChoice string
 
-	// Set mixins to enabled by default
 	ctx.UseMixins = true
 
 	form := huh.NewForm(
@@ -350,17 +397,6 @@ func (s *OptionsStep) Execute(ctx *ProjectContext) error {
 					huh.NewOption("Server Only", "server"),
 				).
 				Value(&envChoice),
-
-			huh.NewSelect[int]().
-				Title("Java Version").
-				Description("Target Java version for compilation").
-				Options(
-					huh.NewOption("Java 21", 21),
-					huh.NewOption("Java 17", 17),
-					huh.NewOption("Java 11", 11),
-					huh.NewOption("Java 8", 8),
-				).
-				Value(&ctx.JavaVersion),
 		),
 	)
 
