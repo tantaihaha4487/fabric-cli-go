@@ -10,6 +10,7 @@ A command-line tool for generating Fabric mod projects for Minecraft.
 - **Real-time Version Fetching** - Automatically fetches latest versions from Fabric Meta and Modrinth APIs
 - **Concurrent API Calls** - Fetches version data in parallel for speed
 - **Auto-Complete** - Automatically selects latest compatible versions and converts mod names to IDs
+- **Auto Java Detection** - Automatically detects installed Java versions and recommends the best one for your Minecraft version
 - **Complete Project Generation** - Generates all necessary files:
   - `build.gradle` with proper dependencies
   - `gradle.properties` with mod metadata
@@ -45,8 +46,9 @@ Simply run without arguments to start the interactive wizard:
 
 The wizard will guide you through:
 1. **Version Selection** - Search for Minecraft version, then select Yarn, Loader, and Fabric API versions
-2. **Mod Metadata** - Enter mod ID, name, description, group ID, etc.
-3. **Additional Options** - Enable mixins, select environment, Java version
+2. **Java Version** - Auto-detects installed Java and recommends the best version for your Minecraft version
+3. **Mod Metadata** - Enter mod ID, name, description, group ID, etc.
+4. **Additional Options** - Enable mixins, select environment
 
 ### Quick Mode
 
@@ -169,6 +171,24 @@ my-mod/
 
 - Go 1.21+
 - Internet connection (for fetching versions)
+
+## Java Version Compatibility
+
+The tool automatically recommends the appropriate Java version based on your Minecraft version:
+
+| Minecraft Version | Recommended Java |
+|-------------------|-----------------|
+| 26.x (2026+)      | Java 25         |
+| 1.21.x            | Java 21          |
+| 1.20.x            | Java 17          |
+| 1.19.x            | Java 17          |
+| 1.18.x            | Java 17          |
+| 1.17.x            | Java 17          |
+| 1.16.x            | Java 16          |
+| 1.14.x - 1.15.x  | Java 11          |
+| 1.8.x - 1.13.x   | Java 8           |
+
+The wizard will detect installed Java versions on your machine and auto-select the recommended version if available.
 
 ## Architecture
 
