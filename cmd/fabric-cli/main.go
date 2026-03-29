@@ -8,6 +8,7 @@ import (
 	"github.com/tantaihaha4487/fabric-cli-go/api"
 	"github.com/tantaihaha4487/fabric-cli-go/config"
 	"github.com/tantaihaha4487/fabric-cli-go/generator"
+	"github.com/tantaihaha4487/fabric-cli-go/internal/javaport"
 	"github.com/tantaihaha4487/fabric-cli-go/wizard"
 )
 
@@ -32,8 +33,9 @@ func printUsage() {
 	fmt.Println("  --no-mixins          Disable Mixins support")
 	fmt.Println("  --client-only        Set environment to client only")
 	fmt.Println("  --server-only        Set environment to server only")
-	fmt.Println("  --java-version=N     Set Java version (default: 21)")
+	fmt.Println("  --java-version=N     Set Java version (default: recommended for MC version)")
 	fmt.Println("  --license=TYPE       Set license (default: MIT)")
+	fmt.Println("  --official-mappings  Use official Mojang mappings (default: Yarn, ignored for 26.x)")
 	fmt.Println()
 	fmt.Println("Examples:")
 	fmt.Println("  # Interactive wizard")
@@ -52,14 +54,16 @@ func printVersion() {
 }
 
 type CLIConfig struct {
-	ShowHelp    bool
-	ShowVersion bool
-	NoMixins    bool
-	ClientOnly  bool
-	ServerOnly  bool
-	JavaVersion int
-	License     string
-	Args        []string
+	ShowHelp         bool
+	ShowVersion      bool
+	NoMixins         bool
+	ClientOnly       bool
+	ServerOnly       bool
+	OfficialMappings bool
+	JavaVersion      int
+	JavaVersionSet   bool
+	License          string
+	Args             []string
 }
 
 func parseArgs() *CLIConfig {
@@ -88,11 +92,15 @@ func parseArgs() *CLIConfig {
 		case "--server-only":
 			cfg.ServerOnly = true
 			i++
+		case "--official-mappings":
+			cfg.OfficialMappings = true
+			i++
 		default:
 			if strings.HasPrefix(arg, "--java-version=") {
 				val := strings.TrimPrefix(arg, "--java-version=")
 				if v, err := parseInt(val); err == nil {
 					cfg.JavaVersion = v
+					cfg.JavaVersionSet = true
 				}
 				i++
 			} else if strings.HasPrefix(arg, "--license=") {
@@ -165,7 +173,7 @@ func runWizardMode() {
 	}
 
 	fmt.Printf("[OK] Found %d Minecraft versions\n", len(fabricVersions.Game))
-	fmt.Printf("[OK] Found %d Yarn mappings\n", len(fabricVersions.Mappings))
+	fmt.Printf("[OK] Found %d mapping versions\n", len(fabricVersions.Mappings))
 	fmt.Printf("[OK] Found %d Fabric API versions\n", len(modrinthVersions))
 	fmt.Println()
 
@@ -209,13 +217,19 @@ func runQuickMode(args []string, cliCfg *CLIConfig) {
 	}
 
 	// Auto-complete mod ID from mod name
-	modID := autoCompleteModID(modName)
+	modID := wizard.NormalizeAutoModID(modName)
 
-	// Auto-select latest yarn mappings for MC version
-	yarnMappings := getLatestYarnMapping(fabricVersions.Mappings, mcVersion)
-	if yarnMappings == "" {
-		fmt.Fprintf(os.Stderr, "Error: No yarn mappings found for Minecraft %s\n", mcVersion)
-		os.Exit(1)
+	useImplicitMappings := wizard.UsesImplicitMappingsProfile(mcVersion)
+
+	// Determine mappings based on version profile and --official-mappings flag
+	var yarnMappings string
+	if !useImplicitMappings && !cliCfg.OfficialMappings {
+		// Auto-select latest yarn mappings for MC version
+		yarnMappings = getLatestYarnMapping(fabricVersions.Mappings, mcVersion)
+		if yarnMappings == "" {
+			fmt.Fprintf(os.Stderr, "Error: No yarn mappings found for Minecraft %s\n", mcVersion)
+			os.Exit(1)
+		}
 	}
 
 	// Auto-select latest loader version
@@ -250,6 +264,11 @@ func runQuickMode(args []string, cliCfg *CLIConfig) {
 		environment = "server"
 	}
 
+	javaVersion := cliCfg.JavaVersion
+	if !cliCfg.JavaVersionSet {
+		javaVersion = javaport.GetRecommendedJava(mcVersion)
+	}
+
 	// Create context
 	ctx := &wizard.ProjectContext{
 		MCVersion:           mcVersion,
@@ -263,9 +282,9 @@ func runQuickMode(args []string, cliCfg *CLIConfig) {
 		GroupID:             groupID,
 		Version:             modVersion,
 		UseMixins:           !cliCfg.NoMixins,
-		UseOfficialMappings: false,
+		UseOfficialMappings: !useImplicitMappings && cliCfg.OfficialMappings,
 		Environment:         environment,
-		JavaVersion:         cliCfg.JavaVersion,
+		JavaVersion:         javaVersion,
 		Templates:           make(map[string]string),
 	}
 
@@ -278,7 +297,13 @@ func runQuickMode(args []string, cliCfg *CLIConfig) {
 	fmt.Println("\n[Summary] Configuration Summary:")
 	fmt.Println("════════════════════════════════════════")
 	fmt.Printf("Minecraft:    %s\n", ctx.MCVersion)
-	fmt.Printf("Yarn:         %s\n", ctx.YarnMappings)
+	if useImplicitMappings {
+		fmt.Printf("Mappings:     Template default (26.x)\n")
+	} else if ctx.UseOfficialMappings {
+		fmt.Printf("Mappings:     Official Mojang\n")
+	} else {
+		fmt.Printf("Mappings:     Yarn %s\n", ctx.YarnMappings)
+	}
 	fmt.Printf("Loader:       %s\n", ctx.LoaderVersion)
 	fmt.Printf("Fabric API:   %s\n", ctx.APIVersion)
 	fmt.Println()
@@ -294,23 +319,6 @@ func runQuickMode(args []string, cliCfg *CLIConfig) {
 
 	// Generate project
 	generateProject(ctx)
-}
-
-func autoCompleteModID(modName string) string {
-	// Convert to lowercase
-	modID := strings.ToLower(modName)
-	// Replace spaces and special chars with underscores
-	modID = strings.ReplaceAll(modID, " ", "_")
-	modID = strings.ReplaceAll(modID, "-", "_")
-	modID = strings.ReplaceAll(modID, ".", "_")
-	// Remove any non-alphanumeric characters except underscores
-	var result strings.Builder
-	for _, r := range modID {
-		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '_' {
-			result.WriteRune(r)
-		}
-	}
-	return result.String()
 }
 
 func getLatestYarnMapping(mappings []api.Mapping, mcVersion string) string {
