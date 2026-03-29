@@ -192,25 +192,62 @@ func (s *VersionStep) Execute(ctx *ProjectContext) error {
 		return err
 	}
 
-	// Filter yarn mappings for selected MC version
-	mappings := api.GetMappingsForVersion(s.FabricVersions.Mappings, ctx.MCVersion)
-	var yarnOptions []huh.Option[string]
-	for _, m := range mappings {
-		yarnOptions = append(yarnOptions, huh.NewOption(m.Version, m.Version))
-	}
+	if UsesImplicitMappingsProfile(ctx.MCVersion) {
+		ctx.UseOfficialMappings = false
+		ctx.YarnMappings = ""
+	} else {
+		defaultOfficial := ShouldDefaultToOfficialMappings(ctx.MCVersion)
+		var mappingType string
+		if defaultOfficial {
+			mappingType = "official"
+		} else {
+			mappingType = "yarn"
+		}
 
-	// Yarn version selection
-	form = huh.NewForm(
-		huh.NewGroup(
-			huh.NewSelect[string]().
-				Title("Select Yarn Mappings").
-				Options(yarnOptions[:min(5, len(yarnOptions))]...).
-				Value(&ctx.YarnMappings),
-		),
-	)
+		form = huh.NewForm(
+			huh.NewGroup(
+				huh.NewSelect[string]().
+					Title("Select Mappings").
+					Description("Yarn: community mappings | Official: Mojang's official mappings").
+					Options(
+						huh.NewOption("Yarn", "yarn"),
+						huh.NewOption("Official Mojang", "official"),
+					).
+					Value(&mappingType),
+			),
+		)
 
-	if err := form.Run(); err != nil {
-		return err
+		if err := form.Run(); err != nil {
+			return err
+		}
+
+		if mappingType == "official" {
+			ctx.UseOfficialMappings = true
+			ctx.YarnMappings = ""
+		} else {
+			ctx.UseOfficialMappings = false
+
+			// Filter yarn mappings for selected MC version
+			mappings := api.GetMappingsForVersion(s.FabricVersions.Mappings, ctx.MCVersion)
+			var yarnOptions []huh.Option[string]
+			for _, m := range mappings {
+				yarnOptions = append(yarnOptions, huh.NewOption(m.Version, m.Version))
+			}
+
+			// Yarn version selection
+			form = huh.NewForm(
+				huh.NewGroup(
+					huh.NewSelect[string]().
+						Title("Select Mappings").
+						Options(yarnOptions[:min(5, len(yarnOptions))]...).
+						Value(&ctx.YarnMappings),
+				),
+			)
+
+			if err := form.Run(); err != nil {
+				return err
+			}
+		}
 	}
 
 	// Loader version options
@@ -316,14 +353,11 @@ func (s *MetadataStep) Execute(ctx *ProjectContext) error {
 		huh.NewGroup(
 			huh.NewInput().
 				Title("Mod ID").
-				Placeholder("lowercase, no spaces").
+				Placeholder("lowercase, at least 2 chars").
 				Description("Unique identifier for your mod").
 				Value(&ctx.ModID).
 				Validate(func(s string) error {
-					if strings.TrimSpace(s) == "" {
-						return fmt.Errorf("mod ID is required")
-					}
-					return nil
+					return ValidateModID(s)
 				}),
 
 			huh.NewInput().
