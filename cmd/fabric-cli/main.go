@@ -7,9 +7,10 @@ import (
 
 	"github.com/tantaihaha4487/fabric-cli-go/api"
 	"github.com/tantaihaha4487/fabric-cli-go/config"
-	"github.com/tantaihaha4487/fabric-cli-go/generator"
-	"github.com/tantaihaha4487/fabric-cli-go/internal/javaport"
-	"github.com/tantaihaha4487/fabric-cli-go/wizard"
+	"github.com/tantaihaha4487/fabric-cli-go/internal/app"
+	"github.com/tantaihaha4487/fabric-cli-go/internal/profile"
+	"github.com/tantaihaha4487/fabric-cli-go/internal/project"
+	"github.com/tantaihaha4487/fabric-cli-go/internal/resolve"
 )
 
 const version = "1.0.0"
@@ -161,40 +162,35 @@ func main() {
 }
 
 func runWizardMode() {
+	svc := app.NewService(api.NewClient())
+
 	fmt.Println("[Fabric] Fabric Project Generator")
 	fmt.Println("Fetching latest versions...")
 
-	// Fetch versions from APIs
-	client := api.NewClient()
-	fabricVersions, modrinthVersions, err := client.FetchAllVersions()
+	versions, err := svc.FetchVersions()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error fetching versions: %v\n", err)
 		os.Exit(1)
 	}
 
-	fmt.Printf("[OK] Found %d Minecraft versions\n", len(fabricVersions.Game))
-	fmt.Printf("[OK] Found %d mapping versions\n", len(fabricVersions.Mappings))
-	fmt.Printf("[OK] Found %d Fabric API versions\n", len(modrinthVersions))
+	fmt.Printf("[OK] Found %d Minecraft versions\n", len(versions.Fabric.Game))
+	fmt.Printf("[OK] Found %d mapping versions\n", len(versions.Fabric.Mappings))
+	fmt.Printf("[OK] Found %d Fabric API versions\n", len(versions.Modrinth))
 	fmt.Println()
 
-	// Create wizard
-	wiz := wizard.NewWizard()
-	wiz.AddStep(wizard.NewVersionStep(fabricVersions, modrinthVersions))
-	wiz.AddStep(&wizard.MetadataStep{})
-	wiz.AddStep(&wizard.OptionsStep{})
-
-	// Execute wizard
+	wiz := svc.NewWizard(versions)
 	ctx, err := wiz.Execute()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error in wizard: %v\n", err)
 		os.Exit(1)
 	}
 
-	// Generate project
-	generateProject(ctx)
+	generateProject(svc, ctx)
 }
 
 func runQuickMode(args []string, cliCfg *CLIConfig) {
+	svc := app.NewService(api.NewClient())
+
 	mcVersion := args[0]
 	modName := args[1]
 	modVersion := args[2]
@@ -208,52 +204,16 @@ func runQuickMode(args []string, cliCfg *CLIConfig) {
 	fmt.Println("[Fabric] Fabric Project Generator (Quick Mode)")
 	fmt.Println("Fetching latest versions...")
 
-	// Fetch versions from APIs
-	client := api.NewClient()
-	fabricVersions, modrinthVersions, err := client.FetchAllVersions()
+	versions, err := svc.FetchVersions()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error fetching versions: %v\n", err)
 		os.Exit(1)
-	}
-
-	// Auto-complete mod ID from mod name
-	modID := wizard.NormalizeAutoModID(modName)
-
-	useImplicitMappings := wizard.UsesImplicitMappingsProfile(mcVersion)
-
-	// Determine mappings based on version profile and --official-mappings flag
-	var yarnMappings string
-	if !useImplicitMappings && !cliCfg.OfficialMappings {
-		// Auto-select latest yarn mappings for MC version
-		yarnMappings = getLatestYarnMapping(fabricVersions.Mappings, mcVersion)
-		if yarnMappings == "" {
-			fmt.Fprintf(os.Stderr, "Error: No yarn mappings found for Minecraft %s\n", mcVersion)
-			os.Exit(1)
-		}
-	}
-
-	// Auto-select latest loader version
-	loaderVersion := getLatestLoaderVersion(fabricVersions.Loader)
-	if loaderVersion == "" {
-		fmt.Fprintf(os.Stderr, "Error: No loader versions found\n")
-		os.Exit(1)
-	}
-
-	// Auto-select latest fabric API for MC version
-	apiVersion := getLatestAPIVersion(modrinthVersions, mcVersion)
-	if apiVersion == "" {
-		fmt.Fprintf(os.Stderr, "Warning: No Fabric API found for Minecraft %s\n", mcVersion)
 	}
 
 	// Load saved config for defaults
 	savedCfg, _ := config.Load()
 	if savedCfg == nil {
 		savedCfg = config.DefaultConfig()
-	}
-
-	// Use command-line group_id if provided, otherwise use config or default
-	if groupID == "" {
-		groupID = savedCfg.GroupID
 	}
 
 	// Determine environment
@@ -264,40 +224,40 @@ func runQuickMode(args []string, cliCfg *CLIConfig) {
 		environment = "server"
 	}
 
-	javaVersion := cliCfg.JavaVersion
-	if !cliCfg.JavaVersionSet {
-		javaVersion = javaport.GetRecommendedJava(mcVersion)
-	}
-
-	// Create context
-	ctx := &wizard.ProjectContext{
+	ctx, buildProfile, err := resolve.QuickContext(resolve.QuickOptions{
 		MCVersion:           mcVersion,
-		YarnMappings:        yarnMappings,
-		LoaderVersion:       loaderVersion,
-		APIVersion:          apiVersion,
-		ModID:               modID,
 		ModName:             modName,
-		ModDescription:      fmt.Sprintf("A Fabric mod: %s", modName),
-		License:             cliCfg.License,
+		ModVersion:          modVersion,
 		GroupID:             groupID,
-		Version:             modVersion,
-		UseMixins:           !cliCfg.NoMixins,
-		UseOfficialMappings: !useImplicitMappings && cliCfg.OfficialMappings,
+		License:             cliCfg.License,
+		NoMixins:            cliCfg.NoMixins,
 		Environment:         environment,
-		JavaVersion:         javaVersion,
-		Templates:           make(map[string]string),
+		JavaVersion:         cliCfg.JavaVersion,
+		JavaVersionSet:      cliCfg.JavaVersionSet,
+		UseOfficialMappings: cliCfg.OfficialMappings,
+	}, savedCfg, versions)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
+	if ctx.APIVersion == "" {
+		fmt.Fprintf(os.Stderr, "Warning: No Fabric API found for Minecraft %s\n", mcVersion)
 	}
 
 	// Save config with preferences
-	savedCfg.GroupID = groupID
+	savedCfg.GroupID = ctx.GroupID
 	savedCfg.Version = modVersion
 	savedCfg.Save()
 
-	// Show summary
+	printSummary(ctx, buildProfile)
+	generateProject(svc, ctx)
+}
+
+func printSummary(ctx *project.Context, buildProfile profile.BuildProfile) {
 	fmt.Println("\n[Summary] Configuration Summary:")
 	fmt.Println("════════════════════════════════════════")
 	fmt.Printf("Minecraft:    %s\n", ctx.MCVersion)
-	if useImplicitMappings {
+	if !buildProfile.SupportsExplicitMapping {
 		fmt.Printf("Mappings:     Template default (26.x)\n")
 	} else if ctx.UseOfficialMappings {
 		fmt.Printf("Mappings:     Official Mojang\n")
@@ -316,53 +276,13 @@ func runQuickMode(args []string, cliCfg *CLIConfig) {
 	fmt.Printf("Java:         %d\n", ctx.JavaVersion)
 	fmt.Printf("License:      %s\n", ctx.License)
 	fmt.Println()
-
-	// Generate project
-	generateProject(ctx)
 }
 
-func getLatestYarnMapping(mappings []api.Mapping, mcVersion string) string {
-	var latest string
-	var latestBuild int
-	for _, m := range mappings {
-		if m.GameVersion == mcVersion && m.Build > latestBuild {
-			latest = m.Version
-			latestBuild = m.Build
-		}
-	}
-	return latest
-}
-
-func getLatestLoaderVersion(loaders []api.LoaderVersion) string {
-	for _, l := range loaders {
-		if l.Stable {
-			return l.Version
-		}
-	}
-	// If no stable, return first
-	if len(loaders) > 0 {
-		return loaders[0].Version
-	}
-	return ""
-}
-
-func getLatestAPIVersion(versions []api.ModrinthVersion, mcVersion string) string {
-	for _, v := range versions {
-		for _, gv := range v.GameVersions {
-			if gv == mcVersion {
-				return v.VersionNumber
-			}
-		}
-	}
-	return ""
-}
-
-func generateProject(ctx *wizard.ProjectContext) {
+func generateProject(svc *app.Service, ctx *project.Context) {
 	projectPath := ctx.ModID
 	fmt.Printf("[Generate] Generating project in '%s/'...\n\n", projectPath)
 
-	gen := generator.NewGenerator(ctx)
-	if err := gen.Generate(projectPath); err != nil {
+	if err := svc.Generate(ctx); err != nil {
 		fmt.Fprintf(os.Stderr, "Error generating project: %v\n", err)
 		os.Exit(1)
 	}

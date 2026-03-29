@@ -1,65 +1,22 @@
 package generator
 
 import (
-	"bytes"
 	"fmt"
-	"io"
-	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
-	"text/template"
 
-	"github.com/tantaihaha4487/fabric-cli-go/wizard"
+	"github.com/tantaihaha4487/fabric-cli-go/internal/project"
 )
 
 // Generator handles project file generation
 type Generator struct {
-	ctx *wizard.ProjectContext
+	ctx *project.Context
 }
 
 // NewGenerator creates a new generator instance
-func NewGenerator(ctx *wizard.ProjectContext) *Generator {
+func NewGenerator(ctx *project.Context) *Generator {
 	return &Generator{ctx: ctx}
-}
-
-func (g *Generator) usesImplicitMappingsProfile() bool {
-	return wizard.UsesImplicitMappingsProfile(g.ctx.MCVersion)
-}
-
-// templateData prepares the data for template rendering
-func (g *Generator) templateData() map[string]interface{} {
-	useImplicitMappings := g.usesImplicitMappingsProfile()
-	gradleVersion := "9.2.1"
-	dependencyConfig := "modImplementation"
-
-	if useImplicitMappings {
-		gradleVersion = "9.3.0"
-		dependencyConfig = "implementation"
-	}
-
-	return map[string]interface{}{
-		"MC_VERSION":         g.ctx.MCVersion,
-		"YARN_MAPPINGS":      g.ctx.YarnMappings,
-		"LOADER_VERSION":     g.ctx.LoaderVersion,
-		"API_VERSION":        g.ctx.APIVersion,
-		"MOD_ID":             g.ctx.ModID,
-		"MOD_NAME":           g.ctx.ModName,
-		"MOD_DESCRIPTION":    g.ctx.ModDescription,
-		"MOD_ENVIRONMENT":    g.ctx.Environment,
-		"LICENSE":            g.ctx.License,
-		"MIXINS":             g.ctx.UseMixins,
-		"MIXIN_PACKAGE_NAME": g.ctx.GroupID + "." + g.ctx.ModID + ".mixin",
-		"GROUP_ID":           g.ctx.GroupID,
-		"ARTIFACT_ID":        g.ctx.ModID,
-		"VERSION":            g.ctx.Version,
-		"JAVA_VERSION":       g.ctx.JavaVersion,
-		"LOOM_VERSION":       "1.15-SNAPSHOT",
-		"OFFICIAL_MAPPINGS":  g.ctx.UseOfficialMappings,
-		"IMPLICIT_MAPPINGS":  useImplicitMappings,
-		"DEPENDENCY_CONFIG":  dependencyConfig,
-		"GRADLE_VERSION":     gradleVersion,
-	}
 }
 
 // Generate creates the project files
@@ -69,7 +26,7 @@ func (g *Generator) Generate(projectPath string) error {
 		return fmt.Errorf("failed to create project directory: %w", err)
 	}
 
-	data := g.templateData()
+	data := buildTemplateData(g.ctx)
 
 	// Generate build.gradle
 	if err := g.generateFile(projectPath, "build.gradle", buildGradleTemplate, data); err != nil {
@@ -105,8 +62,7 @@ func (g *Generator) Generate(projectPath string) error {
 
 	// Download gradle-wrapper.jar
 	fmt.Println("  [...] Downloading gradle-wrapper.jar...")
-	gradleVersion := data["GRADLE_VERSION"].(string)
-	wrapperJarURL := fmt.Sprintf("https://raw.githubusercontent.com/gradle/gradle/v%s/gradle/wrapper/gradle-wrapper.jar", gradleVersion)
+	wrapperJarURL := fmt.Sprintf("https://raw.githubusercontent.com/gradle/gradle/v%s/gradle/wrapper/gradle-wrapper.jar", data.GradleVersion)
 	wrapperJarPath := filepath.Join(projectPath, "gradle", "wrapper", "gradle-wrapper.jar")
 	if err := g.downloadFile(wrapperJarURL, wrapperJarPath); err != nil {
 		fmt.Printf("  [!]  Warning: Could not download gradle-wrapper.jar: %v\n", err)
@@ -152,83 +108,9 @@ func (g *Generator) Generate(projectPath string) error {
 	return nil
 }
 
-// generateFile generates a single file from a template
-func (g *Generator) generateFile(projectPath, relativePath, tmplContent string, data map[string]interface{}) error {
-	// Create function map with custom functions
-	funcMap := template.FuncMap{
-		"ToClassName": toClassName,
-	}
-
-	tmpl, err := template.New("template").Funcs(funcMap).Parse(tmplContent)
-	if err != nil {
-		return fmt.Errorf("failed to parse template for %s: %w", relativePath, err)
-	}
-
-	var buf bytes.Buffer
-	if err := tmpl.Execute(&buf, data); err != nil {
-		return fmt.Errorf("failed to execute template for %s: %w", relativePath, err)
-	}
-
-	fullPath := filepath.Join(projectPath, relativePath)
-	dir := filepath.Dir(fullPath)
-	if err := os.MkdirAll(dir, 0755); err != nil {
-		return fmt.Errorf("failed to create directory %s: %w", dir, err)
-	}
-
-	if err := os.WriteFile(fullPath, buf.Bytes(), 0644); err != nil {
-		return fmt.Errorf("failed to write file %s: %w", fullPath, err)
-	}
-
-	fmt.Printf("  [OK] Generated: %s\n", relativePath)
-	return nil
-}
-
-// toClassName converts mod_id to ClassName
-func toClassName(modID string) string {
-	parts := strings.Split(modID, "_")
-	for i, part := range parts {
-		if len(part) > 0 {
-			parts[i] = strings.ToUpper(part[:1]) + part[1:]
-		}
-	}
-	return strings.Join(parts, "")
-}
-
-// generateWrapperScript generates gradlew script files
-func (g *Generator) generateWrapperScript(projectPath, filename, content string, perm os.FileMode) error {
-	fullPath := filepath.Join(projectPath, filename)
-	if err := os.WriteFile(fullPath, []byte(content), perm); err != nil {
-		return fmt.Errorf("failed to write file %s: %w", fullPath, err)
-	}
-	fmt.Printf("  [OK] Generated: %s\n", filename)
-	return nil
-}
-
-// downloadFile downloads a file from URL to local path
-func (g *Generator) downloadFile(url, filepath string) error {
-	resp, err := http.Get(url)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("bad status: %s", resp.Status)
-	}
-
-	out, err := os.Create(filepath)
-	if err != nil {
-		return err
-	}
-	defer out.Close()
-
-	_, err = io.Copy(out, resp.Body)
-	return err
-}
-
 // Template definitions
 const buildGradleTemplate = `plugins {
-    id 'net.fabricmc.fabric-loom' version '{{ .LOOM_VERSION }}'
+    id 'net.fabricmc.fabric-loom' version '{{ .LoomVersion }}'
     id 'maven-publish'
 }
 
@@ -246,18 +128,18 @@ repositories {
 dependencies {
     // To change the versions see the gradle.properties file
     minecraft "com.mojang:minecraft:${project.minecraft_version}"
-{{if not .IMPLICIT_MAPPINGS}}
-{{if .OFFICIAL_MAPPINGS}}
+{{if not .ImplicitMappings}}
+{{if .OfficialMappings}}
     mappings loom.officialMojangMappings()
 {{else}}
     mappings "net.fabricmc:yarn:${project.yarn_mappings}:v2"
 {{end}}
 {{end}}
-    {{ .DEPENDENCY_CONFIG }} "net.fabricmc:fabric-loader:${project.loader_version}"
+    {{ .DependencyConfig }} "net.fabricmc:fabric-loader:${project.loader_version}"
 
-{{if .API_VERSION}}
+{{if .APIVersion}}
     // Fabric API. This is technically optional, but you probably want it anyway.
-    {{ .DEPENDENCY_CONFIG }} "net.fabricmc.fabric-api:fabric-api:${project.fabric_version}"
+    {{ .DependencyConfig }} "net.fabricmc.fabric-api:fabric-api:${project.fabric_version}"
 {{end}}
 }
 
@@ -274,7 +156,7 @@ processResources {
     }
 }
 
-def targetJavaVersion = {{ .JAVA_VERSION }}
+def targetJavaVersion = {{ .JavaVersion }}
 tasks.withType(JavaCompile).configureEach {
     it.options.encoding = "UTF-8"
     if (targetJavaVersion >= 10 || JavaVersion.current().isJava10Compatible()) {
@@ -311,25 +193,25 @@ publishing {
 
 const gradlePropertiesTemplate = `# Done to increase the memory available to gradle.
 org.gradle.jvmargs=-Xmx1G
-{{if .IMPLICIT_MAPPINGS}}
+{{if .ImplicitMappings}}
 org.gradle.parallel=true
 org.gradle.configuration-cache=false
 {{end}}
 
 # Fabric Properties
 # check these on https://fabricmc.net/develop
-minecraft_version={{ .MC_VERSION }}
-{{if and (not .IMPLICIT_MAPPINGS) (not .OFFICIAL_MAPPINGS)}}yarn_mappings={{ .YARN_MAPPINGS }}
-{{end}}loader_version={{ .LOADER_VERSION }}
+minecraft_version={{ .MCVersion }}
+{{if and (not .ImplicitMappings) (not .OfficialMappings)}}yarn_mappings={{ .YarnMappings }}
+{{end}}loader_version={{ .LoaderVersion }}
 
 # Mod Properties
-mod_version = {{ .VERSION }}
-maven_group = {{ .GROUP_ID }}
-archives_base_name = {{ .ARTIFACT_ID }}
+mod_version = {{ .Version }}
+maven_group = {{ .GroupID }}
+archives_base_name = {{ .ArtifactID }}
 
-{{if .API_VERSION}}# Dependencies
+{{if .APIVersion}}# Dependencies
 # check this on https://fabricmc.net/develop
-fabric_version={{ .API_VERSION }}
+fabric_version={{ .APIVersion }}
 {{end}}
 `
 
@@ -345,35 +227,35 @@ const settingsGradleTemplate = `pluginManagement {
 }
 `
 
-const wrapperPropertiesTemplate = `distributionUrl=https\://services.gradle.org/distributions/gradle-{{ .GRADLE_VERSION }}-bin.zip
+const wrapperPropertiesTemplate = `distributionUrl=https\://services.gradle.org/distributions/gradle-{{ .GradleVersion }}-bin.zip
 `
 
 const fabricModJsonTemplate = `{
   "schemaVersion": 1,
-  "id": "{{ .MOD_ID }}",
+  "id": "{{ .ModID }}",
   "version": "${version}",
 
-  "name": "{{ .MOD_NAME }}",
-  "description": "{{ .MOD_DESCRIPTION }}",
+  "name": "{{ .ModName }}",
+  "description": "{{ .ModDescription }}",
   "authors": [],
   "contact": {},
 
-  "license": "{{ .LICENSE }}",
-  "icon": "assets/{{ .MOD_ID }}/icon.png",
+  "license": "{{ .License }}",
+  "icon": "assets/{{ .ModID }}/icon.png",
 
-  "environment": "{{ .MOD_ENVIRONMENT }}",
+  "environment": "{{ .ModEnvironment }}",
   "entrypoints": {
     "main": [
-      "{{ .GROUP_ID }}.{{ .MOD_ID }}.{{ .MOD_ID | ToClassName }}"
+      "{{ .GroupID }}.{{ .ModID }}.{{ .ModID | ToClassName }}"
     ]
   },
-{{if .MIXINS}}  "mixins": [
-    "{{ .MOD_ID }}.mixins.json"
+{{if .Mixins}}  "mixins": [
+    "{{ .ModID }}.mixins.json"
   ],
 {{end}}  "depends": {
     "fabricloader": ">=${loader_version}",
-    "java": ">={{ .JAVA_VERSION }}",
-{{if .API_VERSION}}{{if .IMPLICIT_MAPPINGS}}    "fabric-api": "*",
+    "java": ">={{ .JavaVersion }}",
+{{if .APIVersion}}{{if .ImplicitMappings}}    "{{ .APIDependencyKey }}": "*",
 {{else}}    "fabric": "*",
 {{end}}
 {{end}}    "minecraft": "~${minecraft_version}"
@@ -384,11 +266,11 @@ const fabricModJsonTemplate = `{
 const mixinsJsonTemplate = `{
   "required": true,
   "minVersion": "0.8",
-  "package": "{{ .MIXIN_PACKAGE_NAME }}",
-  "compatibilityLevel": "JAVA_{{ .JAVA_VERSION }}",
+  "package": "{{ .MixinPackageName }}",
+  "compatibilityLevel": "JAVA_{{ .JavaVersion }}",
   "mixins": [],
   "client": [],
-{{if .IMPLICIT_MAPPINGS}}  "overwrites": {
+{{if .ImplicitMappings}}  "overwrites": {
     "requireAnnotations": true
   },
 {{end}}  "injectors": {
@@ -397,18 +279,18 @@ const mixinsJsonTemplate = `{
 }
 `
 
-const modClassTemplate = `package {{ .GROUP_ID }}.{{ .MOD_ID }};
+const modClassTemplate = `package {{ .GroupID }}.{{ .ModID }};
 
 import net.fabricmc.api.ModInitializer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-public class {{ .MOD_ID | ToClassName }} implements ModInitializer {
-	public static final Logger LOGGER = LoggerFactory.getLogger("{{ .MOD_ID }}");
+public class {{ .ModID | ToClassName }} implements ModInitializer {
+	public static final Logger LOGGER = LoggerFactory.getLogger("{{ .ModID }}");
 
 	@Override
 	public void onInitialize() {
-		LOGGER.info("Hello from {{ .MOD_NAME }}!");
+		LOGGER.info("Hello from {{ .ModName }}!");
 	}
 }
 `

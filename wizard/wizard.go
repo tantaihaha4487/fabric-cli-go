@@ -9,64 +9,27 @@ import (
 	"github.com/tantaihaha4487/fabric-cli-go/api"
 	"github.com/tantaihaha4487/fabric-cli-go/config"
 	"github.com/tantaihaha4487/fabric-cli-go/internal/javaport"
+	"github.com/tantaihaha4487/fabric-cli-go/internal/profile"
+	"github.com/tantaihaha4487/fabric-cli-go/internal/project"
 )
-
-// ProjectContext holds all configuration data collected from the wizard
-type ProjectContext struct {
-	// Version data
-	MCVersion     string
-	YarnMappings  string
-	LoaderVersion string
-	APIVersion    string
-
-	// Mod metadata
-	ModID          string
-	ModName        string
-	ModDescription string
-	License        string
-	GroupID        string
-	Version        string
-
-	// Options
-	UseMixins           bool
-	UseOfficialMappings bool
-	Environment         string // * or client or server
-	JavaVersion         int
-
-	// Templates
-	Templates map[string]string
-}
 
 // Step represents a single step in the wizard
 type Step interface {
 	Name() string
-	Execute(ctx *ProjectContext) error
+	Execute(ctx *project.Context) error
 }
 
 // Wizard manages the step-by-step configuration process
 type Wizard struct {
 	steps []Step
-	ctx   *ProjectContext
+	ctx   *project.Context
 }
 
 // NewWizard creates a new wizard instance
 func NewWizard() *Wizard {
-	// Load saved config
-	cfg, err := config.Load()
-	if err != nil {
-		cfg = config.DefaultConfig()
-	}
-
 	return &Wizard{
 		steps: make([]Step, 0),
-		ctx: &ProjectContext{
-			Templates:   make(map[string]string),
-			JavaVersion: 0,
-			Environment: "*",
-			License:     "MIT",
-			GroupID:     cfg.GroupID,
-			Version:     cfg.Version,
-		},
+		ctx:   project.NewContext(),
 	}
 }
 
@@ -76,7 +39,15 @@ func (w *Wizard) AddStep(step Step) {
 }
 
 // Execute runs all steps in sequence
-func (w *Wizard) Execute() (*ProjectContext, error) {
+func (w *Wizard) Execute() (*project.Context, error) {
+	w.ctx.GroupID = config.DefaultConfig().GroupID
+	w.ctx.Version = config.DefaultConfig().Version
+
+	if cfg, err := config.Load(); err == nil {
+		w.ctx.GroupID = cfg.GroupID
+		w.ctx.Version = cfg.Version
+	}
+
 	titleStyle := lipgloss.NewStyle().
 		Bold(true).
 		Foreground(lipgloss.Color("#00D8BD")).
@@ -128,7 +99,7 @@ func (s *VersionStep) Name() string {
 	return "Version Selection"
 }
 
-func (s *VersionStep) Execute(ctx *ProjectContext) error {
+func (s *VersionStep) Execute(ctx *project.Context) error {
 	// Prepare Minecraft version options (stable versions only)
 	var allStableVersions []api.GameVersion
 	for _, g := range s.FabricVersions.Game {
@@ -192,17 +163,13 @@ func (s *VersionStep) Execute(ctx *ProjectContext) error {
 		return err
 	}
 
-	if UsesImplicitMappingsProfile(ctx.MCVersion) {
+	buildProfile := profile.ForMinecraftVersion(ctx.MCVersion)
+
+	if !buildProfile.SupportsExplicitMapping {
 		ctx.UseOfficialMappings = false
 		ctx.YarnMappings = ""
 	} else {
-		defaultOfficial := ShouldDefaultToOfficialMappings(ctx.MCVersion)
-		var mappingType string
-		if defaultOfficial {
-			mappingType = "official"
-		} else {
-			mappingType = "yarn"
-		}
+		mappingType := string(buildProfile.DefaultMappingMode)
 
 		form = huh.NewForm(
 			huh.NewGroup(
@@ -221,7 +188,7 @@ func (s *VersionStep) Execute(ctx *ProjectContext) error {
 			return err
 		}
 
-		if mappingType == "official" {
+		if mappingType == string(profile.MappingModeOfficial) {
 			ctx.UseOfficialMappings = true
 			ctx.YarnMappings = ""
 		} else {
@@ -348,7 +315,7 @@ func (s *MetadataStep) Name() string {
 	return "Mod Metadata"
 }
 
-func (s *MetadataStep) Execute(ctx *ProjectContext) error {
+func (s *MetadataStep) Execute(ctx *project.Context) error {
 	form := huh.NewForm(
 		huh.NewGroup(
 			huh.NewInput().
@@ -357,7 +324,7 @@ func (s *MetadataStep) Execute(ctx *ProjectContext) error {
 				Description("Unique identifier for your mod").
 				Value(&ctx.ModID).
 				Validate(func(s string) error {
-					return ValidateModID(s)
+					return project.ValidateModID(s)
 				}),
 
 			huh.NewInput().
@@ -408,7 +375,7 @@ func (s *OptionsStep) Name() string {
 	return "Additional Options"
 }
 
-func (s *OptionsStep) Execute(ctx *ProjectContext) error {
+func (s *OptionsStep) Execute(ctx *project.Context) error {
 	var envChoice string
 
 	ctx.UseMixins = true
@@ -440,22 +407,7 @@ func (s *OptionsStep) Execute(ctx *ProjectContext) error {
 
 	ctx.Environment = envChoice
 
-	// Set defaults for empty values
-	if ctx.ModID == "" {
-		ctx.ModID = "mymod"
-	}
-	if ctx.ModName == "" {
-		ctx.ModName = "My Mod"
-	}
-	if ctx.ModDescription == "" {
-		ctx.ModDescription = "A Fabric mod"
-	}
-	if ctx.GroupID == "" {
-		ctx.GroupID = "com.example"
-	}
-	if ctx.Version == "" {
-		ctx.Version = "1.0.0"
-	}
+	project.ApplyDefaults(ctx)
 
 	return nil
 }
