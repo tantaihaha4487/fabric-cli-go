@@ -23,8 +23,21 @@ func NewGenerator(ctx *wizard.ProjectContext) *Generator {
 	return &Generator{ctx: ctx}
 }
 
+func (g *Generator) usesImplicitMappingsProfile() bool {
+	return wizard.UsesImplicitMappingsProfile(g.ctx.MCVersion)
+}
+
 // templateData prepares the data for template rendering
 func (g *Generator) templateData() map[string]interface{} {
+	useImplicitMappings := g.usesImplicitMappingsProfile()
+	gradleVersion := "9.2.1"
+	dependencyConfig := "modImplementation"
+
+	if useImplicitMappings {
+		gradleVersion = "9.3.0"
+		dependencyConfig = "implementation"
+	}
+
 	return map[string]interface{}{
 		"MC_VERSION":         g.ctx.MCVersion,
 		"YARN_MAPPINGS":      g.ctx.YarnMappings,
@@ -43,7 +56,9 @@ func (g *Generator) templateData() map[string]interface{} {
 		"JAVA_VERSION":       g.ctx.JavaVersion,
 		"LOOM_VERSION":       "1.15-SNAPSHOT",
 		"OFFICIAL_MAPPINGS":  g.ctx.UseOfficialMappings,
-		"GRADLE_VERSION":     "9.2.1",
+		"IMPLICIT_MAPPINGS":  useImplicitMappings,
+		"DEPENDENCY_CONFIG":  dependencyConfig,
+		"GRADLE_VERSION":     gradleVersion,
 	}
 }
 
@@ -213,7 +228,7 @@ func (g *Generator) downloadFile(url, filepath string) error {
 
 // Template definitions
 const buildGradleTemplate = `plugins {
-    id 'fabric-loom' version '{{ .LOOM_VERSION }}'
+    id 'net.fabricmc.fabric-loom' version '{{ .LOOM_VERSION }}'
     id 'maven-publish'
 }
 
@@ -231,16 +246,18 @@ repositories {
 dependencies {
     // To change the versions see the gradle.properties file
     minecraft "com.mojang:minecraft:${project.minecraft_version}"
+{{if not .IMPLICIT_MAPPINGS}}
 {{if .OFFICIAL_MAPPINGS}}
     mappings loom.officialMojangMappings()
 {{else}}
     mappings "net.fabricmc:yarn:${project.yarn_mappings}:v2"
 {{end}}
-    modImplementation "net.fabricmc:fabric-loader:${project.loader_version}"
+{{end}}
+    {{ .DEPENDENCY_CONFIG }} "net.fabricmc:fabric-loader:${project.loader_version}"
 
 {{if .API_VERSION}}
     // Fabric API. This is technically optional, but you probably want it anyway.
-    modImplementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_version}"
+    {{ .DEPENDENCY_CONFIG }} "net.fabricmc.fabric-api:fabric-api:${project.fabric_version}"
 {{end}}
 }
 
@@ -294,11 +311,15 @@ publishing {
 
 const gradlePropertiesTemplate = `# Done to increase the memory available to gradle.
 org.gradle.jvmargs=-Xmx1G
+{{if .IMPLICIT_MAPPINGS}}
+org.gradle.parallel=true
+org.gradle.configuration-cache=false
+{{end}}
 
 # Fabric Properties
 # check these on https://fabricmc.net/develop
 minecraft_version={{ .MC_VERSION }}
-{{if not .OFFICIAL_MAPPINGS}}yarn_mappings={{ .YARN_MAPPINGS }}
+{{if and (not .IMPLICIT_MAPPINGS) (not .OFFICIAL_MAPPINGS)}}yarn_mappings={{ .YARN_MAPPINGS }}
 {{end}}loader_version={{ .LOADER_VERSION }}
 
 # Mod Properties
@@ -318,6 +339,7 @@ const settingsGradleTemplate = `pluginManagement {
             name = 'Fabric'
             url = 'https://maven.fabricmc.net/'
         }
+        mavenCentral()
         gradlePluginPortal()
     }
 }
@@ -350,7 +372,10 @@ const fabricModJsonTemplate = `{
   ],
 {{end}}  "depends": {
     "fabricloader": ">=${loader_version}",
-{{if .API_VERSION}}    "fabric": "*",
+    "java": ">={{ .JAVA_VERSION }}",
+{{if .API_VERSION}}{{if .IMPLICIT_MAPPINGS}}    "fabric-api": "*",
+{{else}}    "fabric": "*",
+{{end}}
 {{end}}    "minecraft": "~${minecraft_version}"
   }
 }
@@ -363,7 +388,10 @@ const mixinsJsonTemplate = `{
   "compatibilityLevel": "JAVA_{{ .JAVA_VERSION }}",
   "mixins": [],
   "client": [],
-  "injectors": {
+{{if .IMPLICIT_MAPPINGS}}  "overwrites": {
+    "requireAnnotations": true
+  },
+{{end}}  "injectors": {
     "defaultRequire": 1
   }
 }

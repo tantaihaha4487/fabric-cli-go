@@ -45,7 +45,7 @@ Simply run without arguments to start the interactive wizard:
 ```
 
 The wizard will guide you through:
-1. **Version Selection** - Search for Minecraft version, then select Yarn, Loader, and Fabric API versions
+1. **Version Selection** - Search for Minecraft version, then choose Yarn or Official mappings, Loader, and Fabric API versions. For 26.x, the wizard uses the newer template profile and skips explicit mapping selection.
 2. **Java Version** - Auto-detects installed Java and recommends the best version for your Minecraft version
 3. **Mod Metadata** - Enter mod ID, name, description, group ID, etc.
 4. **Additional Options** - Enable mixins, select environment
@@ -68,8 +68,9 @@ For faster project generation, use quick mode with positional arguments:
 - `--no-mixins` - Disable Mixins support
 - `--client-only` - Set environment to client only
 - `--server-only` - Set environment to server only
-- `--java-version=N` - Set Java version (default: 21)
+- `--java-version=N` - Set Java version (default: recommended for the selected Minecraft version)
 - `--license=TYPE` - Set license (default: MIT)
+- `--official-mappings` - Use official Mojang mappings (default: Yarn, ignored for 26.x)
 
 **Examples:**
 
@@ -99,7 +100,7 @@ $ ./fabric-cli
 [Fabric] Fabric Project Generator
 Fetching latest versions...
 [OK] Found 483 Minecraft versions
-[OK] Found 3410 Yarn mappings
+[OK] Found 3410 mapping versions
 [OK] Found 1015 Fabric API versions
 
 [OK] Loaded 483 Minecraft versions
@@ -114,7 +115,7 @@ Type to search versions (or leave empty to show all)
 [Summary] Configuration Summary:
 ════════════════════════════════════════
 Minecraft:    1.21.4
-Yarn:         1.21.4+build.8
+Mappings:     Yarn 1.21.4+build.8
 Loader:       0.16.9
 Fabric API:   0.110.0
 
@@ -189,6 +190,8 @@ The tool automatically recommends the appropriate Java version based on your Min
 | 1.8.x - 1.13.x   | Java 8           |
 
 The wizard will detect installed Java versions on your machine and auto-select the recommended version if available.
+
+For Minecraft 26.x, the generator follows the newer template profile: Java 25, Gradle 9.3.0, Loom 1.15-SNAPSHOT, and the template's implicit mappings flow instead of an explicit Yarn or Official mappings entry.
 
 ## Architecture
 
