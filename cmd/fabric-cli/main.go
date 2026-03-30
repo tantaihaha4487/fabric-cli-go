@@ -13,7 +13,7 @@ import (
 	"github.com/tantaihaha4487/fabric-cli-go/internal/resolve"
 )
 
-const version = "1.0.0"
+var version = "dev"
 
 func printUsage() {
 	fmt.Println("Fabric Mod Project Generator")
