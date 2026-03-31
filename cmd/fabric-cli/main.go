@@ -1,7 +1,9 @@
 package main
 
 import (
+	"errors"
 	"fmt"
+	"net"
 	"os"
 	"strings"
 
@@ -52,6 +54,20 @@ func printUsage() {
 
 func printVersion() {
 	fmt.Printf("fabric-cli version %s\n", version)
+}
+
+func formatVersionFetchError(err error) string {
+	var dnsErr *net.DNSError
+	if errors.As(err, &dnsErr) {
+		return "no internet connection detected. Please check your network and try again."
+	}
+
+	errText := strings.ToLower(err.Error())
+	if strings.Contains(errText, "temporary failure in name resolution") || strings.Contains(errText, "no such host") {
+		return "no internet connection detected. Please check your network and try again."
+	}
+
+	return err.Error()
 }
 
 type CLIConfig struct {
@@ -169,7 +185,7 @@ func runWizardMode() {
 
 	versions, err := svc.FetchVersions()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error fetching versions: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Error fetching versions: %s\n", formatVersionFetchError(err))
 		os.Exit(1)
 	}
 
@@ -206,7 +222,7 @@ func runQuickMode(args []string, cliCfg *CLIConfig) {
 
 	versions, err := svc.FetchVersions()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error fetching versions: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Error fetching versions: %s\n", formatVersionFetchError(err))
 		os.Exit(1)
 	}
 
